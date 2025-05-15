@@ -26,6 +26,8 @@ io.on("connection", (socket) => {
       round: 1,
     });
     socket.join(roomId);
+    console.log(`⚙️ Received create-room from ${socket.id}`);
+    console.log(`⚙️ Emitting room-created → ${roomId}`);
     socket.emit("room-created", roomId);
   });
 
