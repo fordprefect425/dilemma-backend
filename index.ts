@@ -112,12 +112,19 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     rooms.forEach((room, id) => {
       if (room.players.includes(socket.id)) {
-        console.log(`⚠️ ${socket.id} disconnected, clearing room ${id}`);
-        rooms.delete(id);
+        room.players = room.players.filter(p => p !== socket.id);
+        delete room.scores[socket.id];
+        delete room.choices[socket.id];
+        console.log(`⚠️ ${socket.id} left room ${id} – players left:`, room.players.length);
+  
+        // delete only if NO players remain
+        if (room.players.length === 0) {
+          rooms.delete(id);
+          console.log(`💥 removed empty room ${id}`);
+        }
       }
     });
   });
-});
 
 /* ---------- start server ---------- */
 const PORT = Number(process.env.PORT) || 3001;
