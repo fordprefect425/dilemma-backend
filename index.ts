@@ -1,61 +1,58 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
 
-/* ---------- basic HTTP server & Socket.IO ---------- */
+/* ───────────── HTTP server + Socket.IO ───────────── */
 const httpServer = createServer();
 const io = new Server(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"] },
   path: "/socket.io",
 });
 
-/* ---------- Room state kept in memory ---------- */
+/* ───────────── In-memory room state ──────────────── */
 type RoomState = {
-  players: string[];
-  choices: Record<string, "C" | "D">;
-  scores: Record<string, number>;
-  round: number;
+  players: string[];                     // max 2 socket IDs
+  choices: Record<string, "C" | "D">;    // socketId ➜ choice
+  scores : Record<string, number>;       // socketId ➜ total
+  round  : number;                       // 1-based
 };
 
 const rooms = new Map<string, RoomState>();
 
-/* ---------- helpers ---------- */
-function payoff(a: "C" | "D", b: "C" | "D"): [number, number] {
-  const table: Record<string, [number, number]> = {
-    CC: [3, 3],
-    CD: [0, 5],
-    DC: [5, 0],
-    DD: [1, 1],
-  };
-  return table[`${a}${b}`];
-}
+/* ───────────── payoff helper ─────────────────────── */
+const payoffTable: Record<string, [number, number]> = {
+  CC: [3, 3],
+  CD: [0, 5],
+  DC: [5, 0],
+  DD: [1, 1],
+};
+const payoff = (a: "C" | "D", b: "C" | "D") => payoffTable[`${a}${b}`];
 
-/* ---------- socket handlers ---------- */
+/* ───────────── main socket handler ───────────────── */
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+  console.log("✅ User connected:", socket.id);
 
-  /* log every incoming event */
+  /* log EVERY inbound event */
   socket.onAny((ev, ...args) => {
-    console.log(`📥 ${socket.id} → "${ev}"`, args);
+    console.log(`📥 ${socket.id} ➜ "${ev}"`, args);
   });
 
-  /* CREATE ROOM */
+  /* ---------- CREATE ROOM ---------- */
   socket.on("create-room", () => {
-    const roomId = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const roomId = Math.random().toString(36).slice(2, 8).toUpperCase(); // UPPER-CASE
     rooms.set(roomId, {
       players: [socket.id],
       choices: {},
-      scores: { [socket.id]: 0 },
-      round: 1,
+      scores : { [socket.id]: 0 },
+      round  : 1,
     });
     socket.join(roomId);
-    console.log(`⚙️ create-room from ${socket.id} → ${roomId}`);
-    console.log("new room ID:", roomId);        // ← should now print in upper-case
+    console.log(`⚙️ create-room from ${socket.id} \u2192 ${roomId}`);
     socket.emit("room-created", roomId);
   });
 
-  /* JOIN ROOM */
+  /* ---------- JOIN ROOM ---------- */
   socket.on("join-room", (rawId: string) => {
-    const roomId = rawId.trim().toUpperCase();
+    const roomId = rawId.trim().toUpperCase();                 // UPPER-CASE
     const room   = rooms.get(roomId);
 
     console.log(`🔸 join-room "${roomId}" from ${socket.id}`);
@@ -75,11 +72,11 @@ io.on("connection", (socket) => {
     room.scores[socket.id] = 0;
     socket.join(roomId);
 
-    console.log(`  ✅ joined, players = ${room.players.length}`);
-    io.to(roomId).emit("room-ready", room.players);
+    console.log(`  ✅ joined, players now = ${room.players.length}`);
+    io.to(roomId).emit("room-ready", room.players);            // notify both players
   });
 
-  /* PLAYER CHOICE */
+  /* ---------- PLAYER CHOICE ---------- */
   socket.on("player-choice", ({ roomId, playerId, choice }) => {
     const room = rooms.get(roomId);
     if (!room) return;
@@ -88,15 +85,13 @@ io.on("connection", (socket) => {
 
     if (Object.keys(room.choices).length === 2) {
       const [p1, p2] = room.players;
-      const c1 = room.choices[p1];
-      const c2 = room.choices[p2];
-      const [pts1, pts2] = payoff(c1, c2);
+      const [pts1, pts2] = payoff(room.choices[p1], room.choices[p2]);
 
       room.scores[p1] += pts1;
       room.scores[p2] += pts2;
 
       io.to(roomId).emit("round-result", {
-        choices: { [p1]: c1, [p2]: c2 },
+        choices: { [p1]: room.choices[p1], [p2]: room.choices[p2] },
         scores : room.scores,
         round  : room.round,
       });
@@ -111,25 +106,26 @@ io.on("connection", (socket) => {
     }
   });
 
-  /* DISCONNECT CLEAN-UP */
+  /* ---------- CLEAN-UP ON DISCONNECT ---------- */
   socket.on("disconnect", () => {
     rooms.forEach((room, id) => {
-      if (room.players.includes(socket.id)) {
-        room.players = room.players.filter(p => p !== socket.id);
-        delete room.scores[socket.id];
-        delete room.choices[socket.id];
-        console.log(`⚠️ ${socket.id} left room ${id} – players left:`, room.players.length);
+      if (!room.players.includes(socket.id)) return;
 
-        if (room.players.length === 0) {
-          rooms.delete(id);
-          console.log(`💥 removed empty room ${id}`);
-        }
+      room.players = room.players.filter((p) => p !== socket.id);
+      delete room.scores[socket.id];
+      delete room.choices[socket.id];
+
+      console.log(`⚠️ ${socket.id} left room ${id} – remaining: ${room.players.length}`);
+
+      if (room.players.length === 0) {
+        rooms.delete(id);
+        console.log(`💥 removed empty room ${id}`);
       }
     });
   });
-});   //  <<<<<  missing brace/paren added here
+});
 
-/* ---------- start server ---------- */
+/* ───────────── start server ───────────────────────── */
 const PORT = Number(process.env.PORT) || 3001;
 httpServer.listen(PORT, () =>
   console.log("🚀 Socket.IO running on", PORT)
