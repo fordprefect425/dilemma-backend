@@ -38,13 +38,16 @@ io.on("connection", (socket) => {
 
   /* ---------- CREATE ROOM ---------- */
   socket.on("create-room", () => {
-    const roomId = Math.random().toString(36).slice(2, 8).toUpperCase(); // UPPER-CASE
+    // Generate a random uppercase room ID
+    const roomId = Math.random().toString(36).slice(2, 8).toUpperCase();
+    
     rooms.set(roomId, {
       players: [socket.id],
       choices: {},
       scores : { [socket.id]: 0 },
       round  : 1,
     });
+    
     socket.join(roomId);
     console.log(`⚙️ create-room from ${socket.id} \u2192 ${roomId}`);
     socket.emit("room-created", roomId);
@@ -52,16 +55,18 @@ io.on("connection", (socket) => {
 
   /* ---------- JOIN ROOM ---------- */
   socket.on("join-room", (rawId: string) => {
-    const roomId = rawId.trim().toUpperCase();                 // UPPER-CASE
-    const room   = rooms.get(roomId);
+    const roomId = rawId.trim().toUpperCase();
+    const room = rooms.get(roomId);
 
     console.log(`🔸 join-room "${roomId}" from ${socket.id}`);
+    console.log(`  🔍 All rooms: ${Array.from(rooms.keys()).join(', ')}`);
 
     if (!room) {
-      console.log("  🔺 room not found");
+      console.log(`  🔺 room not found: "${roomId}"`);
       socket.emit("join-error", "Room not found");
       return;
     }
+    
     if (room.players.length >= 2) {
       console.log("  🔺 room full");
       socket.emit("join-error", "Room is full");
@@ -120,6 +125,9 @@ io.on("connection", (socket) => {
       if (room.players.length === 0) {
         rooms.delete(id);
         console.log(`💥 removed empty room ${id}`);
+      } else {
+        // Notify remaining player that opponent has left
+        io.to(id).emit("player-disconnected", socket.id);
       }
     });
   });
