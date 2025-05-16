@@ -49,6 +49,7 @@ io.on("connection", (socket) => {
     });
     socket.join(roomId);
     console.log(`⚙️ create-room from ${socket.id} → ${roomId}`);
+    console.log("new room ID:", roomId);        // ← should now print in upper-case
     socket.emit("room-created", roomId);
   });
 
