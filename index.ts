@@ -32,7 +32,9 @@ function payoff(a: "C" | "D", b: "C" | "D"): [number, number] {
 /* ---------- socket handlers ---------- */
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
-
+  socket.onAny((ev, ...args) => {
+    console.log(`📥 ${socket.id} → "${ev}"`, args);
+  });
   /* CREATE ROOM */
   socket.on("create-room", () => {
     const roomId = Math.random().toString(36).slice(2, 8).toUpperCase();
