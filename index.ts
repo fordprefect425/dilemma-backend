@@ -10,9 +10,9 @@ const io = new Server(httpServer, {
 
 /* ---------- Room state kept in memory ---------- */
 type RoomState = {
-  players: string[];                     // max 2
-  choices: Record<string, "C" | "D">;    // socketId → choice
-  scores: Record<string, number>;        // socketId → score
+  players: string[];
+  choices: Record<string, "C" | "D">;
+  scores: Record<string, number>;
   round: number;
 };
 
@@ -32,9 +32,12 @@ function payoff(a: "C" | "D", b: "C" | "D"): [number, number] {
 /* ---------- socket handlers ---------- */
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
+
+  /* log every incoming event */
   socket.onAny((ev, ...args) => {
     console.log(`📥 ${socket.id} → "${ev}"`, args);
   });
+
   /* CREATE ROOM */
   socket.on("create-room", () => {
     const roomId = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -72,7 +75,7 @@ io.on("connection", (socket) => {
     socket.join(roomId);
 
     console.log(`  ✅ joined, players = ${room.players.length}`);
-    io.to(roomId).emit("room-ready", room.players);   // notify both
+    io.to(roomId).emit("room-ready", room.players);
   });
 
   /* PLAYER CHOICE */
@@ -82,7 +85,6 @@ io.on("connection", (socket) => {
 
     room.choices[playerId] = choice;
 
-    // once both have chosen
     if (Object.keys(room.choices).length === 2) {
       const [p1, p2] = room.players;
       const c1 = room.choices[p1];
@@ -108,7 +110,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  /* DISCONNECT CLEAN-UP (optional) */
+  /* DISCONNECT CLEAN-UP */
   socket.on("disconnect", () => {
     rooms.forEach((room, id) => {
       if (room.players.includes(socket.id)) {
@@ -116,8 +118,7 @@ io.on("connection", (socket) => {
         delete room.scores[socket.id];
         delete room.choices[socket.id];
         console.log(`⚠️ ${socket.id} left room ${id} – players left:`, room.players.length);
-  
-        // delete only if NO players remain
+
         if (room.players.length === 0) {
           rooms.delete(id);
           console.log(`💥 removed empty room ${id}`);
@@ -125,6 +126,7 @@ io.on("connection", (socket) => {
       }
     });
   });
+});   //  <<<<<  missing brace/paren added here
 
 /* ---------- start server ---------- */
 const PORT = Number(process.env.PORT) || 3001;
